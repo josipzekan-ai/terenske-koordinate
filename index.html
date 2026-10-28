@@ -777,6 +777,8 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     <button class="small" id="shareAppTop" style="min-height:34px;padding:4px 12px;margin-left:auto">Pošalji app</button>
   </header>
 
+  <div class="note" id="impNote" hidden><div id="impTxt"></div><div class="row" style="margin-top:8px"><button class="small" id="impClose">U redu</button></div></div>
+
   <div class="note" id="fixLoc" hidden>
     <strong>iPhone:</strong> Postavke → Privatnost i sigurnost → Lokacijske usluge (uključeno) → Safari web-stranice → <em>Tijekom upotrebe</em> + Precizna lokacija.<br>
     Ili na ovoj stranici: ikona lijevo od adrese → Postavke web-stranice → Lokacija → <em>Dopusti</em>.<br>
@@ -1050,6 +1052,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   }
 
   // ---------- share / import ----------
+  const UVOZ=/uvoz(?:=|%3D)([A-Za-z0-9_%-]+)/i;
   const APP_URL='https://josipzekan-ai.github.io/terenske-koordinate/';
   let pendingShare=null;
   function encodeShare(g,list){
@@ -1107,21 +1110,31 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     return true;
   }
   function scrollToGroup(gid){setTimeout(()=>{const c=$('g-'+gid);if(c)try{c.scrollIntoView({block:'start',behavior:'smooth'});}catch(e){}},60);}
+  function note(msg){$('impTxt').textContent=msg;$('impNote').hidden=false;window.scrollTo(0,0);}
+  $('impClose').onclick=()=>{$('impNote').hidden=true;};
+  function cleanPay(x){try{x=decodeURIComponent(x);}catch(e){}return x.replace(/[^A-Za-z0-9_-]/g,'');}
   function checkUrlImport(){
-    const m=(location.search+location.hash).match(/[?#&]uvoz=([A-Za-z0-9_-]+)/);
-    if(!m)return;
+    const raw=location.search+location.hash;
+    if(!/uvoz/i.test(raw))return;
+    const m=raw.match(UVOZ);
     try{history.replaceState(null,'',location.pathname);}catch(e){}
-    let d;try{d=decodePayload(m[1]);}catch(e){toast('Link je oštećen ili nepotpun',3500);return;}
-    importPayload(d,'k'+hashStr(m[1]));
+    if(!m){note('Link sadrži „uvoz“, ali bez podataka o točkama ('+raw.length+' znakova). Zamoli pošiljatelja da ponovno podijeli.');return;}
+    let pay,d;
+    try{pay=cleanPay(m[1]);d=decodePayload(pay);}catch(e){note('Link je oštećen ('+m[1].length+' znakova podataka): '+(e&&e.message||e));return;}
+    if(!d.pts.length){note('Link je stigao ('+pay.length+' znakova), ali u njemu nema ispravnih točaka. Vjerojatno je odrezan.');return;}
+    const before=S.groups.length;
+    importPayload(d,'k'+hashStr(pay));
+    if(S.groups.length>before)note('✓ Uvezeno '+cnt(d.pts.length)+(d.from?' od '+d.from:'')+'. Nova grupa je ispod, označena plavom točkom.');
+    else note('Ove točke su već uvezene ranije.');
   }
   window.addEventListener('hashchange',checkUrlImport);
   window.addEventListener('pageshow',e=>{if(e.persisted)checkUrlImport();});
   function importText(t){
-    if(!t||!t.trim()){toast('Nema teksta za uvoz. Kopiraj poruku s linkom pa pokušaj opet.',4000);return false;}const m=t.match(/uvoz=([A-Za-z0-9_-]+)/);let d,key;
-    if(m){try{d=decodePayload(m[1]);}catch(e){d=null;}
+    if(!t||!t.trim()){toast('Nema teksta za uvoz. Kopiraj poruku s linkom pa pokušaj opet.',4000);return false;}const m=t.match(UVOZ);let d,key,pay;
+    if(m){pay=cleanPay(m[1]);try{d=decodePayload(pay);}catch(e){d=null;}
       if(!d||!d.pts.length){const alt=parsePts(t);if(alt.length)d={from:'',gname:'',pts:alt};}
       if(!d||!d.pts.length){toast('Link je nepotpun ili oštećen. Zamoli pošiljatelja da ponovno podijeli točke.',4500);return false;}
-      key='k'+hashStr(m[1]);}
+      key='k'+hashStr(pay);}
     else{d={from:'',gname:'',pts:parsePts(t)};key='k'+hashStr(t.trim());}
     return importPayload(d,key);
   }
@@ -1130,6 +1143,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     let t='';
     try{t=await navigator.clipboard.readText();}
     catch(e){toast('Preglednik nije dopustio čitanje. Drži prst u polju iznad → Zalijepi, pa „Uvezi iz polja“.',5000);$('importTxt').focus();return;}
+    if(!t||!t.trim()){toast('Preglednik nije predao kopirani tekst. Drži prst u polju iznad → Zalijepi, pa „Uvezi iz polja“.',6000);$('importTxt').focus();return;}
     $('importTxt').value=t;
     if(importText(t))$('importTxt').value='';
   };
