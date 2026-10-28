@@ -725,8 +725,10 @@ h2{font-family:var(--display);font-weight:700;font-size:1.15rem;margin:0}
 .groups{display:flex;flex-direction:column;gap:10px}
 .grp{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .ghead{width:100%;border:0;border-radius:0;background:none;justify-content:flex-start;gap:12px;padding:12px 14px;text-align:left;min-height:60px}
-.gdot{width:12px;height:12px;border-radius:50%;flex:none;background:var(--accent)}
-.gdot.imp{background:var(--sea)}
+.gdot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--line)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.sw{width:34px;height:34px;min-height:34px;padding:0;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line)}
+.sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--ink)}
 .gtxt{display:flex;flex-direction:column;min-width:0;flex:1}
 .gname{font-size:1.05rem;overflow-wrap:anywhere}
 .gmeta{font-family:var(--body);font-weight:400;font-size:.82rem;letter-spacing:0;color:var(--muted)}
@@ -821,7 +823,6 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       <div class="field" style="margin-top:8px"><input type="text" id="askName" placeholder="npr. Josip"><button class="small primary" id="askOk">Podijeli</button></div>
     </div>
     <div class="groups" id="groups"></div>
-    <p class="hint"><span style="color:var(--accent)">●</span> moje grupe &nbsp; <span style="color:var(--sea)">●</span> uvezene od drugih</p>
   </section>
 
   <section>
@@ -945,7 +946,11 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   const P=id=>S.pts.find(p=>p.id===id);
   const ptsOf=gid=>S.pts.filter(p=>p.g===gid);
   function persist(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){toast('Spremanje nije uspjelo: preglednik ne dopušta spremanje (privatni način?)',4000);}}
-  function newGroup(name,src,from){const g={id:uid(),name,src,from:from||'',created:Date.now()};S.groups.push(g);return g;}
+  // colours chosen to stay visible on both satellite imagery and the street map
+  const PALETTE=['#ff7a33','#00d6a4','#ffd23f','#e74cc8','#b6f03c','#ff4757','#9d7bff','#ffffff'];
+  function nextColor(){const used=S.groups.map(g=>g.color);return PALETTE.find(c=>!used.includes(c))||PALETTE[S.groups.length%PALETTE.length];}
+  const gColor=g=>(g&&g.color)||PALETTE[0];
+  function newGroup(name,src,from){const g={id:uid(),name,src,from:from||'',created:Date.now(),color:nextColor()};S.groups.push(g);return g;}
   function ensureGroup(){
     if(!S.groups.length)newGroup('Moje točke','me');
     if(!G(S.active))S.active=(S.groups.find(g=>g.src==='me')||S.groups[0]).id;
@@ -963,6 +968,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     ensureGroup();
   }
   load();
+  {let ch=false;S.groups.forEach(g=>{if(g.color==='#2ec4f1'){g.color='#00d6a4';ch=true;}});[...S.groups].sort((x,y)=>(x.created||0)-(y.created||0)).forEach(g=>{if(!g.color){g.color=nextColor();ch=true;}});if(ch)persist();}
 
   // ---------- live readout ----------
   let cur=null;
@@ -1005,9 +1011,9 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       if(imp){if(g.from)meta.push('od '+g.from);meta.push('uvezeno '+fShort(g.created));}
       else if(list.length){const last=Math.max(...list.map(p=>p.t||0));if(last)meta.push('zadnja '+fDate(last));}
       const head=el('button',{class:'ghead','aria-expanded':String(isOpen),onclick:()=>{isOpen?open.delete(g.id):open.add(g.id);renderGroups();}},
-        el('span',{class:'gdot'+(imp?' imp':'')}),
+        el('span',{class:'gdot',style:'background:'+gColor(g)}),
         el('span',{class:'gtxt'},el('span',{class:'gname',text:g.name}),el('span',{class:'gmeta',text:meta.join(' · ')})),
-        isActive?el('span',{class:'chip',text:'snimam ovdje'}):null,
+        isActive?el('span',{class:'chip',text:'snimam ovdje'}):imp?el('span',{class:'chip',style:'color:var(--muted)',text:'uvezeno'}):null,
         el('span',{class:'chev','aria-hidden':'true',text:isOpen?'▴':'▾'}));
       const card=el('div',{class:'grp'+(flashGrp===g.id?' flash':''),id:'g-'+g.id},head);
       if(isOpen){
@@ -1039,6 +1045,9 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
           isActive?null:el('button',{class:'small grow',text:'Snimaj u ovu grupu',onclick:()=>{S.active=g.id;persist();renderAll();toast('Nove točke idu u „'+g.name+'“');}}),
           el('button',{class:'small grow',text:'Preimenuj',onclick:()=>{ren.hidden=!ren.hidden;if(!ren.hidden)renIn.focus();}}),
           el('button',{class:'small grow danger',text:'Obriši grupu',onclick:()=>{del.hidden=false;}})));
+        const sws=el('div',{class:'swatches'},el('span',{class:'lbl',text:'Boja na karti'}));
+        PALETTE.forEach(c=>sws.appendChild(el('button',{class:'sw',style:'background:'+c,'aria-label':'Boja '+c,'aria-pressed':String(gColor(g)===c),onclick:()=>{g.color=c;persist();renderGroups();}})));
+        body.appendChild(sws);
         body.appendChild(ren);body.appendChild(del);
         card.appendChild(body);
       }
@@ -1190,7 +1199,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   function reportImport(d,key){
     if(!d.pts.length){note('Link je stigao, ali u njemu nema ispravnih točaka. Vjerojatno je odrezan — zamoli pošiljatelja da ponovno podijeli.');return;}
     const before=S.groups.length;importPayload(d,key);
-    if(S.groups.length>before)note('✓ Uvezeno '+cnt(d.pts.length)+(d.from?' od '+d.from:'')+'. Nova grupa je ispod, označena plavom točkom.');
+    if(S.groups.length>before)note('✓ Uvezeno '+cnt(d.pts.length)+(d.from?' od '+d.from:'')+'. Nova grupa je ispod, označena s „uvezeno“.');
     else note('Ove točke su već uvezene ranije.');
   }
   async function checkUrlImport(){
@@ -1254,17 +1263,16 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     try{await loadLeaflet();}catch(e){msg.hidden=false;msg.textContent='Karta se ne može učitati — provjeri internet. Sve ostalo radi i bez karte.';return;}
     msg.hidden=true;
     if(!map){
-      map=L.map('map',{zoomControl:true});
+      map=L.map('map',{zoomControl:true});map.attributionControl.setPrefix('Leaflet');
       for(const k in TILES)bases[k]=L.tileLayer(TILES[k][0],{maxNativeZoom:19,maxZoom:21,attribution:TILES[k][1]});
       (bases[S.base]||bases.sat).addTo(map);overlay=L.layerGroup().addTo(map);
     }
     overlay.clearLayers();
     const cs=getComputedStyle(document.documentElement);
-    const cOwn=cs.getPropertyValue('--accent').trim()||'#e8590c',cImp=cs.getPropertyValue('--sea').trim()||'#0b6f96';
     const ll=[];
     list.forEach(p=>{
-      const g=G(p.g),col=g&&g.src==='import'?cImp:cOwn,pos=[p.lat,p.lon];ll.push(pos);
-      if(p.acc)L.circle(pos,{radius:p.acc,color:col,weight:1,fillColor:col,fillOpacity:.15,interactive:false}).addTo(overlay);
+      const g=G(p.g),col=gColor(g),pos=[p.lat,p.lon];ll.push(pos);
+      if(p.acc)L.circle(pos,{radius:p.acc,color:col,weight:2,opacity:.95,fillColor:col,fillOpacity:.2,interactive:false}).addTo(overlay);
       const m=L.circleMarker(pos,{radius:7,color:'#ffffff',weight:2,fillColor:col,fillOpacity:1}).addTo(overlay);
       m.bindTooltip(p.name,{permanent:true,direction:'right',offset:[8,0],className:'tip'});
       if(!single)m.on('click',()=>openPoint(p.id,true));
