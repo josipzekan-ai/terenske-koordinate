@@ -825,7 +825,11 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     <h2>Uvezi točke</h2>
     <p class="hint">Točke se uvezu same kad dodirneš link iz poruke. Ako se link otvori negdje drugdje, zalijepi ga ovdje (ili cijelu poruku / CSV).</p>
     <textarea id="importTxt" aria-label="Link ili tekst s točkama" placeholder="https://josipzekan-ai.github.io/terenske-koordinate/?uvoz=…"></textarea>
-    <button class="small" id="importBtn" style="align-self:flex-start">Uvezi</button>
+    <div class="row">
+      <button class="small primary grow" id="pasteBtn">Zalijepi kopirano i uvezi</button>
+      <button class="small grow" id="importBtn">Uvezi iz polja</button>
+    </div>
+    <p class="hint">U WhatsAppu drži prst na poruci → Kopiraj, pa ovdje dodirni „Zalijepi kopirano i uvezi“.</p>
   </section>
 
   <section>
@@ -1096,11 +1100,22 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   }
   window.addEventListener('hashchange',checkUrlImport);
   window.addEventListener('pageshow',e=>{if(e.persisted)checkUrlImport();});
-  $('importBtn').onclick=()=>{
-    const t=$('importTxt').value;const m=t.match(/uvoz=([A-Za-z0-9_-]+)/);let d,key;
-    if(m){try{d=decodePayload(m[1]);}catch(e){toast('Link je oštećen ili nepotpun',3500);return;}key='k'+hashStr(m[1]);}
+  function importText(t){
+    if(!t||!t.trim()){toast('Nema teksta za uvoz. Kopiraj poruku s linkom pa pokušaj opet.',4000);return false;}const m=t.match(/uvoz=([A-Za-z0-9_-]+)/);let d,key;
+    if(m){try{d=decodePayload(m[1]);}catch(e){d=null;}
+      if(!d||!d.pts.length){const alt=parsePts(t);if(alt.length)d={from:'',gname:'',pts:alt};}
+      if(!d||!d.pts.length){toast('Link je nepotpun ili oštećen. Zamoli pošiljatelja da ponovno podijeli točke.',4500);return false;}
+      key='k'+hashStr(m[1]);}
     else{d={from:'',gname:'',pts:parsePts(t)};key='k'+hashStr(t.trim());}
-    if(importPayload(d,key))$('importTxt').value='';
+    return importPayload(d,key);
+  }
+  $('importBtn').onclick=()=>{if(importText($('importTxt').value))$('importTxt').value='';};
+  $('pasteBtn').onclick=async()=>{
+    let t='';
+    try{t=await navigator.clipboard.readText();}
+    catch(e){toast('Preglednik nije dopustio čitanje. Drži prst u polju iznad → Zalijepi, pa „Uvezi iz polja“.',5000);$('importTxt').focus();return;}
+    $('importTxt').value=t;
+    if(importText(t))$('importTxt').value='';
   };
 
   // ---------- map sheet ----------
