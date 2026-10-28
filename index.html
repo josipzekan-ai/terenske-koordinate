@@ -80,6 +80,12 @@ textarea{font-family:var(--mono);font-size:.85rem;padding:10px 12px;border-radiu
 
   <div class="status" aria-live="polite"><span class="dot" id="dot"></span><span id="statusTxt">Pokrećem GPS…</span></div>
 
+  <div class="note" id="linkImport" hidden>
+    <strong id="liTitle">Primljene točke</strong>
+    <div id="liList" class="val" style="margin:6px 0;font-size:.85rem"></div>
+    <div class="row"><button class="small primary" id="liYes">Uvezi</button><button class="small" id="liNo">Odustani</button></div>
+  </div>
+
   <div class="note" id="fixLoc" hidden>
     <strong>iPhone:</strong> Postavke → Privatnost i sigurnost → Lokacijske usluge (uključeno) → Safari web-stranice → <em>Tijekom upotrebe</em> + Precizna lokacija.<br>
     Ili na ovoj stranici: ikona lijevo od adrese → Postavke web-stranice → Lokacija → <em>Dopusti</em>.<br>
@@ -296,30 +302,58 @@ textarea{font-family:var(--mono);font-size:.85rem;padding:10px 12px;border-radiu
   function csv(){return 'Naziv;E;N;Lat;Lon;Tocnost_m\n'+pts.map(p=>[p.name,plain(p.E,3),plain(p.N,3),plain(p.lat,8),plain(p.lon,8),p.acc!=null?p.acc.toFixed(1):''].join(';')).join('\n');}
   function scr(){return pts.map(p=>'_POINT '+plain(p.E,3)+','+plain(p.N,3)+'\n_TEXT '+plain(p.E+0.5,3)+','+plain(p.N+0.5,3)+' 1 0 '+p.name).join('\n')+'\n';}
   $('csvBtn').onclick=()=>copy(csv(),'CSV kopiran');
-  function shareText(){const k=pts.length;return 'Terenske koordinate – '+k+(k===1?' točka':(k%10>=2&&k%10<=4&&(k%100<10||k%100>20))?' točke':' točaka')+' (HTRS96/TM)\n'+csv()+'\n\nUvoz: josipzekan-ai.github.io/terenske-koordinate → Uvezi točke';}
+  function shareText(){const k=pts.length;return 'Terenske koordinate – '+k+(k===1?' točka':(k%10>=2&&k%10<=4&&(k%100<10||k%100>20))?' točke':' točaka')+' (HTRS96/TM)\nDodirni link za uvoz:\n'+APP_URL+'#uvoz='+b64e(csv())+'\n\n'+csv();}
   $('shareBtn').onclick=async()=>{
     if(usingExample||!pts.length){toast('Nema spremljenih točaka za dijeljenje');return;}
     const text=shareText();
     if(navigator.share){try{await navigator.share({title:'Terenske koordinate',text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
     copy(text,'Točke kopirane — zalijepi u WhatsApp');
   };
-  $('importBtn').onclick=()=>{
-    const lines=$('importTxt').value.split(/\r?\n/);
-    let added=0,skipped=0;
-    if(usingExample){pts=[];usingExample=false;}
-    for(const ln of lines){
+  function parsePts(text){
+    const out=[];
+    for(const ln of text.split(/\r?\n/)){
       const f=ln.split(';').map(x=>x.trim());
       if(f.length<5)continue;
       const lat=parseFloat((f[3]||'').replace(',','.')), lon=parseFloat((f[4]||'').replace(',','.'));
       if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
-      const name=f[0]||('T'+(pts.length+1));
       const acc=f[5]!==undefined&&f[5]!==''?parseFloat(f[5].replace(',','.')):null;
-      if(pts.some(p=>p.name===name&&Math.abs(p.lat-lat)<1e-7&&Math.abs(p.lon-lon)<1e-7)){skipped++;continue;}
-      pts.push(Object.assign({name,lat,lon,acc:isFinite(acc)?acc:null,t:Date.now()},toTM(lat,lon)));added++;
+      out.push({name:f[0],lat,lon,acc:isFinite(acc)?acc:null});
     }
-    if(!added&&!skipped){toast('U tekstu nisam našao točke. Zalijepi cijelu poruku.');return;}
-    persist();render();$('importTxt').value='';
+    return out;
+  }
+  function importPts(list){
+    let added=0,skipped=0;
+    if(list.length&&usingExample){pts=[];usingExample=false;}
+    for(const q of list){
+      const name=q.name||('T'+(pts.length+1));
+      if(pts.some(p=>p.name===name&&Math.abs(p.lat-q.lat)<1e-7&&Math.abs(p.lon-q.lon)<1e-7)){skipped++;continue;}
+      pts.push(Object.assign({name,lat:q.lat,lon:q.lon,acc:q.acc,t:Date.now()},toTM(q.lat,q.lon)));added++;
+    }
+    persist();render();
     toast('Uvezeno: '+added+(skipped?' · preskočeno '+skipped+' (već postoje)':''));
+    return added+skipped;
+  }
+  function b64e(str){const b=new TextEncoder().encode(str);let bin='';b.forEach(x=>bin+=String.fromCharCode(x));return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+  function b64d(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return new TextDecoder().decode(Uint8Array.from(bin,c=>c.charCodeAt(0)));}
+  const APP_URL='https://josipzekan-ai.github.io/terenske-koordinate/';
+  function checkLinkImport(){
+    const h=location.hash;
+    if(!h.startsWith('#uvoz='))return;
+    let list=[];
+    try{list=parsePts(b64d(h.slice(6)));}catch(e){}
+    try{history.replaceState(null,'',location.pathname);}catch(e){}
+    if(!list.length){toast('Link ne sadrži ispravne točke');return;}
+    const k=list.length;
+    $('liTitle').textContent='Primljeno '+k+(k===1?' točka':(k%10>=2&&k%10<=4&&(k%100<10||k%100>20))?' točke':' točaka')+' — uvesti?';
+    $('liList').textContent=list.slice(0,8).map(q=>q.name).join(', ')+(k>8?' …':'');
+    $('linkImport').hidden=false;
+    $('liYes').onclick=()=>{importPts(list);$('linkImport').hidden=true;};
+    $('liNo').onclick=()=>{$('linkImport').hidden=true;};
+  }
+  $('importBtn').onclick=()=>{
+    const list=parsePts($('importTxt').value);
+    if(!list.length){toast('U tekstu nisam našao točke. Zalijepi cijelu poruku.');return;}
+    importPts(list);$('importTxt').value='';
   };
   $('scrBtn').onclick=()=>copy(scr(),'BricsCAD skripta kopirana');
   let downloads=null;
@@ -336,7 +370,7 @@ textarea{font-family:var(--mono);font-size:.85rem;padding:10px 12px;border-radiu
   $('clearYes').onclick=()=>{pts=[];usingExample=false;persist();render();$('clearConfirm').hidden=true;toast('Sve točke obrisane');};
 
   $('retryBtn').onclick=()=>location.reload();
-  render();startGPS();
+  render();checkLinkImport();startGPS();
 })();
 </script>
 
