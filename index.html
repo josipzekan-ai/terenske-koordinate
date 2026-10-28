@@ -60,7 +60,12 @@ td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
 tr:last-child td{border-bottom:0}
 td.num{text-align:right}
 .ex{font-size:.7rem;color:var(--warn);font-family:var(--display);letter-spacing:.06em;text-transform:uppercase}
-.del{background:none;border:0;color:var(--bad);min-height:32px;padding:4px 8px;font-size:.85rem}
+.del,.redo{background:none;border:0;min-height:32px;padding:4px 8px;font-size:.85rem}
+.del{color:var(--bad)} .redo{color:var(--sea)}
+.redo.arm{background:var(--sea);color:var(--panel);border-radius:8px}
+.redo:disabled{opacity:.35}
+tr.flash td{background:color-mix(in srgb,var(--ok) 18%,transparent)}
+textarea{font-family:var(--mono);font-size:.85rem;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);width:100%;min-height:96px;resize:vertical}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:calc(100% - 32px)}
 .toast.show{opacity:1}
 .note{font-size:.85rem;background:color-mix(in srgb,var(--warn) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-radius:10px;padding:10px 12px}
@@ -120,12 +125,26 @@ td.num{text-align:right}
         <tbody id="tbody"></tbody>
       </table>
     </div>
+    <p class="hint">"Ponovno" zamijeni točku trenutnim GPS očitanjem (dodirni dvaput za potvrdu).</p>
+    <div class="row">
+      <button class="primary small" id="shareBtn">Podijeli točke</button>
+    </div>
     <div class="row">
       <button class="grow small" id="csvBtn">Kopiraj CSV</button>
       <button class="grow small" id="scrBtn">Kopiraj BricsCAD .scr</button>
       <button class="grow small" id="dlBtn">Preuzmi CSV</button>
     </div>
     <p class="hint">CSV: Naziv;E;N;φ;λ;Točnost. Skripta crta točku i naziv na E,N (POINT + TEXT) — zalijepi u naredbeni redak BricsCAD-a ili spremi kao .scr.</p>
+  </section>
+
+  <section>
+    <h2>Uvezi točke</h2>
+    <p class="hint">Zalijepi poruku s točkama koju ti je netko poslao (gumb "Podijeli točke" ili CSV). Točke koje već imaš se preskaču.</p>
+    <textarea id="importTxt" aria-label="Tekst s točkama za uvoz" placeholder="Terenske koordinate – 3 točke&#10;Naziv;E;N;Lat;Lon;Tocnost_m&#10;T1;495167.132;4818690.660;43.50812000;16.44023000;3.2"></textarea>
+    <button class="small" id="importBtn" style="align-self:flex-start">Uvezi</button>
+  </section>
+
+  <section>
     <button class="small" id="clearBtn" style="align-self:flex-start">Obriši sve točke</button>
     <div id="clearConfirm" hidden class="row note">
       <span style="flex:1 1 100%">Obrisati sve spremljene točke? Ovo se ne može vratiti.</span>
@@ -172,7 +191,7 @@ td.num{text-align:right}
   let pts=[];
   const KEY='terenske-koordinate-pts';
   try{pts=JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){pts=[];}
-  let usingExample=false;
+  let usingExample=false, flashIdx=-1;
   if(!pts.length){usingExample=true;pts=[
     {name:'Primjer T1',lat:43.50812,lon:16.44023,acc:4,t:Date.now()},
     {name:'Primjer T2',lat:43.50760,lon:16.44110,acc:6,t:Date.now()}
@@ -180,7 +199,7 @@ td.num{text-align:right}
   function persist(){if(usingExample)return;try{localStorage.setItem(KEY,JSON.stringify(pts));}catch(e){}}
 
   function setStatus(cls,txt){$('dot').className='dot '+cls;$('statusTxt').textContent=txt;}
-  function render(){
+  function render(full=true){
     if(cur){
       $('E').innerHTML=fmt(cur.E)+'<span class="u">m</span>';
       $('N').innerHTML=fmt(cur.N)+'<span class="u">m</span>';
@@ -192,6 +211,7 @@ td.num{text-align:right}
       $('alt').textContent=(cur.alt!=null?cur.alt.toFixed(1)+' m':'—')+' · '+new Date(cur.time).toLocaleTimeString('hr-HR');
       $('saveBtn').disabled=false;$('copyBtn').disabled=false;
     }
+    if(!full){document.querySelectorAll('.redo').forEach(b=>{b.disabled=!cur;});return;}
     const tb=$('tbody');tb.textContent='';
     pts.forEach((p,i)=>{
       const tr=document.createElement('tr');
@@ -200,10 +220,24 @@ td.num{text-align:right}
       if(usingExample){const s=document.createElement('div');s.className='ex';s.textContent='primjer';nm.appendChild(s);}
       c(plain(p.E),'num');c(plain(p.N),'num');c(p.acc!=null?p.acc.toFixed(1):'—','num');
       const td=document.createElement('td');
-      if(!usingExample){const b=document.createElement('button');b.className='del';b.textContent='Ukloni';b.setAttribute('aria-label','Ukloni '+p.name);
+      td.style.whiteSpace='nowrap';
+      if(!usingExample){
+        const r=document.createElement('button');r.className='redo';r.textContent='Ponovno';r.setAttribute('aria-label','Ponovno snimi '+p.name);
+        r.disabled=!cur;
+        r.onclick=()=>{
+          if(!cur)return;
+          if(!r.classList.contains('arm')){r.classList.add('arm');r.textContent='Potvrdi?';setTimeout(()=>{if(r.isConnected){r.classList.remove('arm');r.textContent='Ponovno';}},3500);return;}
+          Object.assign(p,{lat:cur.lat,lon:cur.lon,E:cur.E,N:cur.N,acc:cur.acc,t:cur.time});
+          flashIdx=i;persist();render();
+          toast(p.name+' ponovno snimljena'+(cur.acc!=null?' (± '+cur.acc.toFixed(1)+' m)':''));
+        };
+        td.appendChild(r);
+        const b=document.createElement('button');b.className='del';b.textContent='Ukloni';b.setAttribute('aria-label','Ukloni '+p.name);
         b.onclick=()=>{pts.splice(i,1);persist();render();toast('Točka uklonjena');};td.appendChild(b);}
+      if(i===flashIdx){tr.classList.add('flash');setTimeout(()=>tr.classList.remove('flash'),1500);}
       tr.appendChild(td);tb.appendChild(tr);
     });
+    flashIdx=-1;
     $('cnt').textContent=usingExample?'primjeri':String(pts.length);
     $('ptName').placeholder='Naziv točke (prazno = T'+((usingExample?0:pts.length)+1)+')';
   }
@@ -219,7 +253,7 @@ td.num{text-align:right}
         const c=pos.coords, tm=toTM(c.latitude,c.longitude);
         cur={lat:c.latitude,lon:c.longitude,E:tm.E,N:tm.N,acc:c.accuracy,alt:c.altitude,time:pos.timestamp,src:'gps'};
         setStatus(c.accuracy<=15?'ok':'warn', c.accuracy<=15?'GPS aktivan':'GPS aktivan, točnost slaba — pričekaj ili izađi na otvoreno');
-        render();
+        render(false);
       },err=>{
         if(err.code===1){
           const inFrame=window.self!==window.top;
@@ -256,12 +290,37 @@ td.num{text-align:right}
     if(!r){toast('Upiši φ, λ u decimalnim stupnjevima, npr. 43.50812, 16.44023');return;}
     const tm=toTM(r.lat,r.lon);
     cur={lat:r.lat,lon:r.lon,E:tm.E,N:tm.N,acc:null,alt:null,time:Date.now(),src:'manual'};
-    render();toast('Preračunato');
+    render(false);toast('Preračunato');
   };
   $('manual').addEventListener('keydown',e=>{if(e.key==='Enter')$('manualBtn').click();});
   function csv(){return 'Naziv;E;N;Lat;Lon;Tocnost_m\n'+pts.map(p=>[p.name,plain(p.E,3),plain(p.N,3),plain(p.lat,8),plain(p.lon,8),p.acc!=null?p.acc.toFixed(1):''].join(';')).join('\n');}
   function scr(){return pts.map(p=>'_POINT '+plain(p.E,3)+','+plain(p.N,3)+'\n_TEXT '+plain(p.E+0.5,3)+','+plain(p.N+0.5,3)+' 1 0 '+p.name).join('\n')+'\n';}
   $('csvBtn').onclick=()=>copy(csv(),'CSV kopiran');
+  function shareText(){const k=pts.length;return 'Terenske koordinate – '+k+(k===1?' točka':(k%10>=2&&k%10<=4&&(k%100<10||k%100>20))?' točke':' točaka')+' (HTRS96/TM)\n'+csv()+'\n\nUvoz: josipzekan-ai.github.io/terenske-koordinate → Uvezi točke';}
+  $('shareBtn').onclick=async()=>{
+    if(usingExample||!pts.length){toast('Nema spremljenih točaka za dijeljenje');return;}
+    const text=shareText();
+    if(navigator.share){try{await navigator.share({title:'Terenske koordinate',text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
+    copy(text,'Točke kopirane — zalijepi u WhatsApp');
+  };
+  $('importBtn').onclick=()=>{
+    const lines=$('importTxt').value.split(/\r?\n/);
+    let added=0,skipped=0;
+    if(usingExample){pts=[];usingExample=false;}
+    for(const ln of lines){
+      const f=ln.split(';').map(x=>x.trim());
+      if(f.length<5)continue;
+      const lat=parseFloat((f[3]||'').replace(',','.')), lon=parseFloat((f[4]||'').replace(',','.'));
+      if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
+      const name=f[0]||('T'+(pts.length+1));
+      const acc=f[5]!==undefined&&f[5]!==''?parseFloat(f[5].replace(',','.')):null;
+      if(pts.some(p=>p.name===name&&Math.abs(p.lat-lat)<1e-7&&Math.abs(p.lon-lon)<1e-7)){skipped++;continue;}
+      pts.push(Object.assign({name,lat,lon,acc:isFinite(acc)?acc:null,t:Date.now()},toTM(lat,lon)));added++;
+    }
+    if(!added&&!skipped){toast('U tekstu nisam našao točke. Zalijepi cijelu poruku.');return;}
+    persist();render();$('importTxt').value='';
+    toast('Uvezeno: '+added+(skipped?' · preskočeno '+skipped+' (već postoje)':''));
+  };
   $('scrBtn').onclick=()=>copy(scr(),'BricsCAD skripta kopirana');
   let downloads=null;
   if(window.claude&&window.claude.use){window.claude.use('downloads').then(d=>{downloads=d;}).catch(()=>{});}
