@@ -826,7 +826,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
 
   <section>
     <h2>Uvezi točke</h2>
-    <p class="hint">Točke se uvezu same kad dodirneš link iz poruke. Ako se link otvori negdje drugdje, zalijepi ga ovdje (ili cijelu poruku / CSV).</p>
+    <p class="hint">Točke se uvezu same kad dodirneš link iz poruke. Ovdje možeš zalijepiti i poruku bez linka ili bilo koji popis točaka u HTRS96 (Naziv E N — iz BricsCAD-a, Excela, od geodeta). Prihvaća razmak, tab, točku-zarez, decimalnu točku ili zarez.</p>
     <textarea id="importTxt" aria-label="Link ili tekst s točkama" placeholder="https://josipzekan-ai.github.io/terenske-koordinate/u/…"></textarea>
     <div class="row">
       <button class="small primary grow" id="pasteBtn">Zalijepi kopirano i uvezi</button>
@@ -889,6 +889,16 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     let x=xi, y=eta;
     for(let j=1;j<=3;j++){x+=al[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta); y+=al[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta);}
     return {E:E0+k0*A*y, N:k0*A*x};
+  }
+  const be=[n/2-2*n2/3+37*n3/96, n2/48+n3/15, 17*n3/480];
+  const de=[2*n-2*n2/3-2*n3, 7*n2/3-8*n3/5, 56*n3/15];
+  function fromTM(E,N){
+    const xi=N/(k0*A), eta=(E-E0)/(k0*A);
+    let xp=xi, ep=eta;
+    for(let j=1;j<=3;j++){xp-=be[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta); ep-=be[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta);}
+    const chi=Math.asin(Math.sin(xp)/Math.cosh(ep));
+    let phi=chi; for(let j=1;j<=3;j++)phi+=de[j-1]*Math.sin(2*j*chi);
+    return {lat:phi*180/Math.PI, lon:(L0+Math.atan2(Math.sinh(ep),Math.cos(xp)))*180/Math.PI};
   }
 
   // ---------- helpers ----------
@@ -1082,7 +1092,9 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   }
   async function doShare(gid){
     const g=G(gid),list=ptsOf(gid);if(!g||!list.length)return;
-    const text=S.me+' šalje '+cnt(list.length)+' – „'+g.name+'“ (HTRS96/TM)\nDodirni link za uvoz:\n'+APP_URL+'u/'+(await encodeShare(g,list))+'\n\n'+csv(list);
+    const rows=list.map(p=>[String(p.name).replace(/;/g,','),plain(p.E),plain(p.N),p.acc!=null?p.acc.toFixed(1):'',p.t?fDate(p.t):''].join('; '));
+    const text=S.me+' – „'+g.name+'“ · '+cnt(list.length)+' · HTRS96/TM\n'+'Naziv; E; N; ±m; Snimljeno\n'+rows.join('\n')+
+      '\n\nUvoz u aplikaciju (dodirni):\n'+APP_URL+'u/'+(await encodeShare(g,list));
     if(navigator.share){try{await navigator.share({text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
     copy(text,'Poruka kopirana — zalijepi je u WhatsApp');
   }
@@ -1098,23 +1110,71 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   $('askOk').onclick=()=>{const v=$('askName').value.trim();if(!v){$('askName').focus();return;}S.me=v;persist();$('meName').value=v;$('nameAsk').hidden=true;if(pendingShare)doShare(pendingShare);pendingShare=null;};
   $('meName').addEventListener('change',()=>{S.me=$('meName').value.trim();persist();toast('Ime spremljeno');});
 
-  function parsePts(text){
+  // Generic point-list parser: own messages/CSV, CAD/Excel lists "Naziv E N", HTRS96 or WGS84.
+  const isE=v=>v>=150000&&v<=850000, isN=v=>v>=4500000&&v<=5300000;
+  const isLat=v=>v>=41&&v<=48, isLon=v=>v>=12&&v<=21;
+  function num(tok){tok=tok.trim().replace(/\s/g,'');if(!/^[-+]?\d+(?:[.,]\d+)?$/.test(tok))return NaN;return parseFloat(tok.replace(',','.'));}
+  function parseDate(str){const m=String(str||'').match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})\.?\s*(?:(\d{1,2}):(\d{2}))?/);if(!m)return null;const d=new Date(+m[3],+m[2]-1,+m[1],+(m[4]||0),+(m[5]||0));return isNaN(d)?null:d.getTime();}
+  function splitLine(ln){
+    if(/[;\t]/.test(ln))return ln.split(/[;\t]/).map(x=>x.trim());
+    if(/,/.test(ln)&&/\d\.\d/.test(ln))return ln.split(/[,\s]+/).map(x=>x.trim()).filter(Boolean);
     const out=[];
-    for(const ln of text.split(/\r?\n/)){
-      const fl=ln.split(';').map(x=>x.trim());
-      if(fl.length<5)continue;
-      const lat=parseFloat((fl[3]||'').replace(',','.')),lon=parseFloat((fl[4]||'').replace(',','.'));
-      if(!isFinite(lat)||!isFinite(lon)||Math.abs(lat)>90||Math.abs(lon)>180)continue;
-      const acc=fl[5]?parseFloat(fl[5].replace(',','.')):NaN;
-      out.push({name:fl[0],lat,lon,acc:isFinite(acc)?acc:null,t:null,alt:null});
+    for(const t of ln.trim().split(/\s+/)){
+      const pr=t.match(/^([-+]?\d+(?:\.\d+)?),([-+]?\d+(?:\.\d+)?)$/);
+      if(pr&&(t.includes('.')||(pr[1].length>=5&&pr[2].length>=5))){out.push(pr[1],pr[2]);}
+      else out.push(t.replace(/,$/,''));
     }
     return out;
+  }
+  const HMAP=[[/^(naziv|ime|name|točka|tocka|br\.?|broj|oznaka|id|pt)$/,'name'],[/^(e|y|easting|istok|e\s*\(y\))$/,'E'],[/^(n|x|northing|sjever|n\s*\(x\))$/,'N'],
+    [/^(lat|φ|fi|phi|latitude|širina)$/,'lat'],[/^(lon|lng|λ|lambda|longitude|dužina)$/,'lon'],[/^(±m|tocnost_m|točnost|tocnost|acc|±)$/,'acc'],[/^(snimljeno|vrijeme|datum|time|date)$/,'t'],[/^(h|z|visina|alt)$/,'alt']];
+  function headerMap(fields){
+    const m={};let hits=0;
+    fields.forEach((f,i)=>{const k=f.toLowerCase().replace(/[„“"']/g,'').trim();for(const [re,key] of HMAP)if(re.test(k)&&m[key]==null){m[key]=i;hits++;break;}});
+    return (hits>=2&&((m.E!=null&&m.N!=null)||(m.lat!=null&&m.lon!=null)))?m:null;
+  }
+  function parsePts(text){
+    const out=[];let hm=null;
+    for(const ln of String(text).split(/\r?\n/)){
+      if(!ln.trim()||/https?:\/\//.test(ln))continue;
+      const f=splitLine(ln);
+      const h=headerMap(f);if(h){hm=h;continue;}
+      let name='',E=NaN,N=NaN,lat=NaN,lon=NaN,acc=null,t=null,alt=null;
+      if(hm){
+        const g=k=>hm[k]!=null?f[hm[k]]:undefined;
+        name=(g('name')||'').trim();E=num(g('E')||'');N=num(g('N')||'');lat=num(g('lat')||'');lon=num(g('lon')||'');
+        const a=num(g('acc')||'');acc=isFinite(a)?a:null;t=parseDate(g('t'));const z=num(g('alt')||'');alt=isFinite(z)?z:null;
+        if(!(isE(E)&&isN(N))&&isN(E)&&isE(N)){const tmp=E;E=N;N=tmp;}
+      }else{
+        const nums=f.map(num);
+        let iE=nums.findIndex(isE), iN=nums.findIndex((v,i)=>i!==iE&&isN(v));
+        if(iE>=0&&iN>=0){E=nums[iE];N=nums[iN];
+          const first=Math.min(iE,iN);name=f.slice(0,first).join(' ').trim();
+          const rest=nums.slice(Math.max(iE,iN)+1).filter(isFinite);
+          const iLa=rest.findIndex(isLat);if(iLa>=0&&isLon(rest[iLa+1]))rest.splice(iLa,2);
+          if(rest.length&&Math.abs(rest[0])<9000)alt=rest[0];
+        }else{
+          const iLa=nums.findIndex(isLat);
+          if(iLa>=0&&isLon(nums[iLa+1])){lat=nums[iLa];lon=nums[iLa+1];name=f.slice(0,iLa).join(' ').trim();}
+          else continue;
+        }
+        t=parseDate(ln);
+      }
+      if(isE(E)&&isN(N)){const w=fromTM(E,N);lat=w.lat;lon=w.lon;}
+      if(!isFinite(lat)||!isFinite(lon)||!isLat(lat)||!isLon(lon))continue;
+      out.push({name,lat,lon,acc,t,alt});
+    }
+    return out;
+  }
+  function parseMeta(text){
+    const m=String(text).match(/^\s*(.+?)\s+[–-]\s+„(.+?)“/m);
+    return m?{from:m[1].trim(),gname:m[2].trim()}:{from:'',gname:''};
   }
   function decodePayload(s){return parseJson(b64d(s));}
   const UPATH=/terenske-koordinate\/u\/([A-Za-z0-9_-]+)/;
   function importPayload(d,key){
     const list=d.pts.filter(q=>isFinite(q.lat)&&isFinite(q.lon)&&Math.abs(q.lat)<=90&&Math.abs(q.lon)<=180);
-    if(!list.length){toast('U linku/tekstu nisam našao točke',3500);return false;}
+    if(!list.length){toast('Nisam našao točke. Svaki red treba imati naziv i E N u HTRS96 (npr. T1 492418.42 4822707.95).',5000);return false;}
     const ex=S.groups.find(g=>g.key===key);
     if(ex){toast('Ove točke su već uvezene u „'+ex.name+'“',3500);open.add(ex.id);flashGrp=ex.id;renderAll();scrollToGroup(ex.id);return true;}
     const name=d.from?(d.gname?d.from+' – '+d.gname:d.from):(d.gname||'Uvezeno '+fDate(Date.now()));
@@ -1163,7 +1223,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       if(!d||!d.pts.length){const alt=parsePts(t);if(alt.length)d={from:'',gname:'',pts:alt};}
       if(!d||!d.pts.length){toast('Link je nepotpun ili oštećen. Zamoli pošiljatelja da ponovno podijeli točke.',4500);return false;}
       key='k'+hashStr(pay);}
-    else{d={from:'',gname:'',pts:parsePts(t)};key='k'+hashStr(t.trim());}
+    else{d=Object.assign(parseMeta(t),{pts:parsePts(t)});key='k'+hashStr(t.trim());}
     return importPayload(d,key);
   }
   $('importBtn').onclick=async()=>{if(await importText($('importTxt').value))$('importTxt').value='';};
