@@ -75,6 +75,13 @@ td.num{text-align:right}
 
   <div class="status" aria-live="polite"><span class="dot" id="dot"></span><span id="statusTxt">Pokrećem GPS…</span></div>
 
+  <div class="note" id="fixLoc" hidden>
+    <strong>iPhone:</strong> Postavke → Privatnost i sigurnost → Lokacijske usluge (uključeno) → Safari web-stranice → <em>Tijekom upotrebe</em> + Precizna lokacija.<br>
+    Ili na ovoj stranici: ikona lijevo od adrese → Postavke web-stranice → Lokacija → <em>Dopusti</em>.<br>
+    <strong>Android:</strong> lokot lijevo od adrese → Dopuštenja → Lokacija → Dopusti.
+    <div class="row" style="margin-top:10px"><button class="small" id="retryBtn">Pokušaj ponovno</button></div>
+  </div>
+
   <div class="readout" id="readout">
     <div class="pair">
       <div><div class="lbl">E (y) — istok</div><div class="big" id="E">—<span class="u">m</span></div></div>
@@ -214,7 +221,13 @@ td.num{text-align:right}
         setStatus(c.accuracy<=15?'ok':'warn', c.accuracy<=15?'GPS aktivan':'GPS aktivan, točnost slaba — pričekaj ili izađi na otvoreno');
         render();
       },err=>{
-        if(err.code===1)setStatus('bad','Lokacija nije dopuštena u ovom prikazu. Otvori aplikaciju kao zasebnu stranicu (HTTPS) i dopusti lokaciju, ili koristi ručni unos.');
+        if(err.code===1){
+          const inFrame=window.self!==window.top;
+          setStatus('bad', inFrame
+            ?'Lokacija nije dostupna u ovom prikazu. Otvori josipzekan-ai.github.io/terenske-koordinate u pregledniku ili koristi ručni unos.'
+            :'Lokacija je odbijena. Dopusti je pa dodirni Pokušaj ponovno.');
+          if(!inFrame)$('fixLoc').hidden=false;
+        }
         else if(err.code===3)setStatus('warn','Čekam GPS signal…');
         else setStatus('bad','GPS nedostupan. Uključi lokaciju na mobitelu ili koristi ručni unos.');
       },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
@@ -263,6 +276,7 @@ td.num{text-align:right}
   $('clearNo').onclick=()=>{$('clearConfirm').hidden=true;};
   $('clearYes').onclick=()=>{pts=[];usingExample=false;persist();render();$('clearConfirm').hidden=true;toast('Sve točke obrisane');};
 
+  $('retryBtn').onclick=()=>location.reload();
   render();startGPS();
 })();
 </script>
