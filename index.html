@@ -774,6 +774,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   <header>
     <h1>Terenske koordinate</h1>
     <span class="crs">HTRS96/TM · EPSG:3765</span>
+    <button class="small" id="shareAppTop" style="min-height:34px;padding:4px 12px;margin-left:auto">Pošalji app</button>
   </header>
 
   <div class="note" id="fixLoc" hidden>
@@ -839,6 +840,12 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       <input type="text" id="manual" placeholder="43.50812, 16.44023" aria-label="WGS84 koordinate" inputmode="decimal">
       <button id="manualBtn" class="small">Preračunaj</button>
     </div>
+  </section>
+
+  <section>
+    <h2>Pošalji aplikaciju</h2>
+    <p class="hint">Pošalji kolegi link na aplikaciju s kratkim uputama. Ne treba mu nikakva instalacija.</p>
+    <button class="small primary" id="shareAppBtn" style="align-self:flex-start">Pošalji aplikaciju kolegi</button>
   </section>
 
   <section>
@@ -1058,6 +1065,15 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     if(navigator.share){try{await navigator.share({text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
     copy(text,'Poruka kopirana — zalijepi je u WhatsApp');
   }
+  async function shareApp(){
+    const text='Terenske koordinate – očitanje GPS položaja u HTRS96/TM (E, N), spremanje i dijeljenje točaka.\n'+APP_URL+'\n\n'+
+      '1. Otvori link u pregledniku (Chrome ili Safari) i dopusti lokaciju.\n'+
+      '2. Dodaj na početni zaslon: dijeljenje → Dodaj na početni zaslon.\n'+
+      '3. Točku spremi kad je točnost zelena (ispod 5 m).';
+    if(navigator.share){try{await navigator.share({text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
+    copy(text,'Link na aplikaciju kopiran — zalijepi ga u WhatsApp');
+  }
+  $('shareAppBtn').onclick=shareApp;$('shareAppTop').onclick=shareApp;
   $('askOk').onclick=()=>{const v=$('askName').value.trim();if(!v){$('askName').focus();return;}S.me=v;persist();$('meName').value=v;$('nameAsk').hidden=true;if(pendingShare)doShare(pendingShare);pendingShare=null;};
   $('meName').addEventListener('change',()=>{S.me=$('meName').value.trim();persist();toast('Ime spremljeno');});
 
