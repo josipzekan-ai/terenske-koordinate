@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#0b4f6c"><style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}</style></head><body>
+<title>Terenske koordinate HTRS96</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: one column field instrument — live readout on top, actions, then saved points log */
+:root{
+  --bg:#eef2f4; --panel:#ffffff; --ink:#0f2230; --muted:#5b6f7c; --line:#d3dde3;
+  --accent:#e8590c; --accent-ink:#ffffff; --sea:#0b4f6c; --ok:#1f8a4c; --warn:#b7791f; --bad:#c0392b;
+  --display:"Barlow Semi Condensed","Arial Narrow",system-ui,sans-serif;
+  --body:"Barlow",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0b1820; --panel:#11232e; --ink:#e3edf2; --muted:#8ea3b0; --line:#21384600;
+  --line:#22394a; --accent:#ff7a33; --accent-ink:#1a0d04; --sea:#5fb3d6; --ok:#4cc27e; --warn:#e0a84a; --bad:#ef6a5b; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0b1820; --panel:#11232e; --ink:#e3edf2; --muted:#8ea3b0;
+  --line:#22394a; --accent:#ff7a33; --accent-ink:#1a0d04; --sea:#5fb3d6; --ok:#4cc27e; --warn:#e0a84a; --bad:#ef6a5b; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.45}
+.wrap{max-width:560px;margin:0 auto;padding-block:14px 40px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:14px}
+header{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+h1{font-family:var(--display);font-weight:700;font-size:1.5rem;letter-spacing:.01em;margin:0;text-wrap:balance}
+.crs{font-family:var(--mono);font-size:.75rem;color:var(--muted)}
+.status{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--muted);flex:none}
+.dot.ok{background:var(--ok);box-shadow:0 0 0 4px color-mix(in srgb,var(--ok) 22%,transparent)}
+.dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+.readout{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:12px}
+.lbl{font-family:var(--display);font-weight:600;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.big{font-family:var(--mono);font-weight:600;font-size:clamp(1.7rem,8.5vw,2.4rem);font-variant-numeric:tabular-nums;line-height:1.1;letter-spacing:-.01em;overflow-wrap:anywhere}
+.big .u{font-size:.45em;color:var(--muted);font-weight:400;margin-left:4px}
+.pair{display:grid;grid-template-columns:1fr;gap:10px}
+.sub{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding-top:12px;border-top:1px dashed var(--line)}
+.sub div{min-width:0}
+.val{font-family:var(--mono);font-size:.95rem;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.acc{display:inline-block;font-family:var(--mono);font-size:.85rem;padding:2px 8px;border-radius:999px;border:1px solid currentColor}
+.acc.ok{color:var(--ok)} .acc.warn{color:var(--warn)} .acc.bad{color:var(--bad)} .acc.none{color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+button,.btn{font-family:var(--display);font-weight:600;font-size:1rem;letter-spacing:.02em;border-radius:10px;padding:12px 16px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer;min-height:48px}
+button:focus-visible,input:focus-visible{outline:3px solid var(--sea);outline-offset:2px}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);flex:1 1 180px}
+button.grow{flex:1 1 140px}
+button:disabled{opacity:.45;cursor:not-allowed}
+.small{font-size:.85rem;min-height:38px;padding:8px 12px}
+input[type=text]{font-family:var(--mono);font-size:1rem;padding:11px 12px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--ink);width:100%;min-width:0}
+.field{display:flex;gap:8px}
+.field input{flex:1}
+section{display:flex;flex-direction:column;gap:10px}
+h2{font-family:var(--display);font-weight:700;font-size:1.1rem;margin:0;display:flex;justify-content:space-between;align-items:baseline}
+h2 small{font-family:var(--mono);font-weight:400;font-size:.8rem;color:var(--muted)}
+.hint{font-size:.85rem;color:var(--muted);margin:0}
+.tblwrap{overflow-x:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.82rem;font-variant-numeric:tabular-nums}
+th{font-family:var(--display);font-weight:600;font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td.num{text-align:right}
+.ex{font-size:.7rem;color:var(--warn);font-family:var(--display);letter-spacing:.06em;text-transform:uppercase}
+.del{background:none;border:0;color:var(--bad);min-height:32px;padding:4px 8px;font-size:.85rem}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(18px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:999px;font-size:.9rem;opacity:0;transition:opacity .2s;pointer-events:none;max-width:calc(100% - 32px)}
+.toast.show{opacity:1}
+.note{font-size:.85rem;background:color-mix(in srgb,var(--warn) 12%,var(--panel));border:1px solid color-mix(in srgb,var(--warn) 40%,var(--line));border-radius:10px;padding:10px 12px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Terenske koordinate</h1>
+    <span class="crs">HTRS96/TM · EPSG:3765</span>
+  </header>
+
+  <div class="status" aria-live="polite"><span class="dot" id="dot"></span><span id="statusTxt">Pokrećem GPS…</span></div>
+
+  <div class="readout" id="readout">
+    <div class="pair">
+      <div><div class="lbl">E (y) — istok</div><div class="big" id="E">—<span class="u">m</span></div></div>
+      <div><div class="lbl">N (x) — sjever</div><div class="big" id="N">—<span class="u">m</span></div></div>
+    </div>
+    <div class="sub">
+      <div><div class="lbl">φ WGS84</div><div class="val" id="lat">—</div><div class="val" id="latD" style="color:var(--muted)"></div></div>
+      <div><div class="lbl">λ WGS84</div><div class="val" id="lon">—</div><div class="val" id="lonD" style="color:var(--muted)"></div></div>
+      <div><div class="lbl">Točnost</div><span class="acc none" id="acc">—</span></div>
+      <div><div class="lbl">Visina (elips.) / vrijeme</div><div class="val" id="alt">—</div></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <button class="primary" id="saveBtn" disabled>Spremi točku</button>
+    <button class="grow" id="copyBtn" disabled>Kopiraj E, N</button>
+  </div>
+  <div class="field">
+    <input type="text" id="ptName" placeholder="Naziv točke (npr. T1, bitva 3)" aria-label="Naziv točke">
+  </div>
+
+  <section>
+    <h2>Ručni unos</h2>
+    <p class="hint">Zalijepi koordinate iz Google Mapsa (npr. 43.50812, 16.44023) i dobiješ HTRS96/TM.</p>
+    <div class="field">
+      <input type="text" id="manual" placeholder="43.50812, 16.44023" aria-label="WGS84 koordinate" inputmode="decimal">
+      <button id="manualBtn" class="small">Preračunaj</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Spremljene točke <small id="cnt">0</small></h2>
+    <div class="tblwrap">
+      <table>
+        <thead><tr><th>Naziv</th><th>E</th><th>N</th><th>±m</th><th></th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="row">
+      <button class="grow small" id="csvBtn">Kopiraj CSV</button>
+      <button class="grow small" id="scrBtn">Kopiraj BricsCAD .scr</button>
+      <button class="grow small" id="dlBtn">Preuzmi CSV</button>
+    </div>
+    <p class="hint">CSV: Naziv;E;N;φ;λ;Točnost. Skripta crta točku i naziv na E,N (POINT + TEXT) — zalijepi u naredbeni redak BricsCAD-a ili spremi kao .scr.</p>
+    <button class="small" id="clearBtn" style="align-self:flex-start">Obriši sve točke</button>
+    <div id="clearConfirm" hidden class="row note">
+      <span style="flex:1 1 100%">Obrisati sve spremljene točke? Ovo se ne može vratiti.</span>
+      <button class="small" id="clearYes" style="color:var(--bad)">Da, obriši</button>
+      <button class="small" id="clearNo">Odustani</button>
+    </div>
+  </section>
+
+  <p class="hint">Preračun WGS84 → HTRS96/TM: GRS80, λ₀ = 16°30′, k₀ = 0,9999, E₀ = 500 000 m (Krügerov red, točnost &lt; 1 mm). Razlika WGS84/ETRS89 za mobilni GPS je zanemariva. Točke se spremaju samo na ovom uređaju.</p>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function(){
+  // ---------- WGS84/GRS80 -> HTRS96/TM ----------
+  const a=6378137, f=1/298.257222101, k0=0.9999, L0=16.5*Math.PI/180, E0=500000, N0=0;
+  const n=f/(2-f), n2=n*n, n3=n2*n;
+  const A=a/(1+n)*(1+n2/4+n2*n2/64);
+  const al=[n/2-2*n2/3+5*n3/16, 13*n2/48-3*n3/5, 61*n3/240];
+  const e2=2*Math.sqrt(n)/(1+n);
+  function toTM(latDeg,lonDeg){
+    const p=latDeg*Math.PI/180, dl=lonDeg*Math.PI/180-L0;
+    const sp=Math.sin(p);
+    const t=Math.sinh(Math.atanh(sp)-e2*Math.atanh(e2*sp));
+    const xi=Math.atan2(t,Math.cos(dl)), eta=Math.atanh(Math.sin(dl)/Math.sqrt(1+t*t));
+    let x=xi, y=eta;
+    for(let j=1;j<=3;j++){x+=al[j-1]*Math.sin(2*j*xi)*Math.cosh(2*j*eta); y+=al[j-1]*Math.cos(2*j*xi)*Math.sinh(2*j*eta);}
+    return {E:E0+k0*A*y, N:N0+k0*A*x};
+  }
+  // ---------- helpers ----------
+  const $=id=>document.getElementById(id);
+  const fmt=(v,d=2)=>v.toLocaleString('hr-HR',{minimumFractionDigits:d,maximumFractionDigits:d});
+  const plain=(v,d=2)=>v.toFixed(d);
+  function dms(v,pos,neg){const s=v<0?neg:pos;v=Math.abs(v);const d=Math.floor(v);const mf=(v-d)*60;const m=Math.floor(mf);const sec=(mf-m)*60;return d+'° '+String(m).padStart(2,'0')+'′ '+sec.toFixed(2).padStart(5,'0')+'″ '+s;}
+  let toastT;
+  function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),2200);}
+  async function copy(text,ok){
+    try{await navigator.clipboard.writeText(text);toast(ok);}
+    catch(e){const ta=document.createElement('textarea');ta.value=text;document.body.appendChild(ta);ta.select();
+      let done=false;try{done=document.execCommand('copy');}catch(_){}ta.remove();toast(done?ok:'Kopiranje nije uspjelo');}
+  }
+  // ---------- state ----------
+  let cur=null; // {lat,lon,E,N,acc,alt,time,src}
+  let pts=[];
+  const KEY='terenske-koordinate-pts';
+  try{pts=JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){pts=[];}
+  let usingExample=false;
+  if(!pts.length){usingExample=true;pts=[
+    {name:'Primjer T1',lat:43.50812,lon:16.44023,acc:4,t:Date.now()},
+    {name:'Primjer T2',lat:43.50760,lon:16.44110,acc:6,t:Date.now()}
+  ].map(p=>Object.assign(p,toTM(p.lat,p.lon)));}
+  function persist(){if(usingExample)return;try{localStorage.setItem(KEY,JSON.stringify(pts));}catch(e){}}
+
+  function setStatus(cls,txt){$('dot').className='dot '+cls;$('statusTxt').textContent=txt;}
+  function render(){
+    if(cur){
+      $('E').innerHTML=fmt(cur.E)+'<span class="u">m</span>';
+      $('N').innerHTML=fmt(cur.N)+'<span class="u">m</span>';
+      $('lat').textContent=plain(cur.lat,7)+'°';$('lon').textContent=plain(cur.lon,7)+'°';
+      $('latD').textContent=dms(cur.lat,'N','S');$('lonD').textContent=dms(cur.lon,'E','W');
+      const acc=$('acc');
+      if(cur.acc!=null){acc.textContent='± '+cur.acc.toFixed(1)+' m';acc.className='acc '+(cur.acc<=5?'ok':cur.acc<=15?'warn':'bad');}
+      else{acc.textContent='ručni unos';acc.className='acc none';}
+      $('alt').textContent=(cur.alt!=null?cur.alt.toFixed(1)+' m':'—')+' · '+new Date(cur.time).toLocaleTimeString('hr-HR');
+      $('saveBtn').disabled=false;$('copyBtn').disabled=false;
+    }
+    const tb=$('tbody');tb.textContent='';
+    pts.forEach((p,i)=>{
+      const tr=document.createElement('tr');
+      const c=(v,cl)=>{const td=document.createElement('td');if(cl)td.className=cl;td.textContent=v;tr.appendChild(td);return td;};
+      const nm=c(p.name);
+      if(usingExample){const s=document.createElement('div');s.className='ex';s.textContent='primjer';nm.appendChild(s);}
+      c(plain(p.E),'num');c(plain(p.N),'num');c(p.acc!=null?p.acc.toFixed(1):'—','num');
+      const td=document.createElement('td');
+      if(!usingExample){const b=document.createElement('button');b.className='del';b.textContent='Ukloni';b.setAttribute('aria-label','Ukloni '+p.name);
+        b.onclick=()=>{pts.splice(i,1);persist();render();toast('Točka uklonjena');};td.appendChild(b);}
+      tr.appendChild(td);tb.appendChild(tr);
+    });
+    $('cnt').textContent=usingExample?'primjeri':String(pts.length);
+    $('ptName').placeholder='Naziv točke (prazno = T'+((usingExample?0:pts.length)+1)+')';
+  }
+
+  // ---------- GPS ----------
+  let wake=null;
+  async function keepAwake(){try{if(navigator.wakeLock&&document.visibilityState==='visible')wake=await navigator.wakeLock.request('screen');}catch(e){}}
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')keepAwake();});
+  function startGPS(){
+    if(!('geolocation' in navigator)){setStatus('bad','Ovaj preglednik nema GPS. Koristi ručni unos.');return;}
+    try{
+      navigator.geolocation.watchPosition(pos=>{
+        const c=pos.coords, tm=toTM(c.latitude,c.longitude);
+        cur={lat:c.latitude,lon:c.longitude,E:tm.E,N:tm.N,acc:c.accuracy,alt:c.altitude,time:pos.timestamp,src:'gps'};
+        setStatus(c.accuracy<=15?'ok':'warn', c.accuracy<=15?'GPS aktivan':'GPS aktivan, točnost slaba — pričekaj ili izađi na otvoreno');
+        render();
+      },err=>{
+        if(err.code===1)setStatus('bad','Lokacija nije dopuštena u ovom prikazu. Otvori aplikaciju kao zasebnu stranicu (HTTPS) i dopusti lokaciju, ili koristi ručni unos.');
+        else if(err.code===3)setStatus('warn','Čekam GPS signal…');
+        else setStatus('bad','GPS nedostupan. Uključi lokaciju na mobitelu ili koristi ručni unos.');
+      },{enableHighAccuracy:true,maximumAge:0,timeout:20000});
+      keepAwake();
+    }catch(e){setStatus('bad','GPS nije dostupan u ovom prikazu. Koristi ručni unos.');}
+  }
+
+  // ---------- actions ----------
+  $('copyBtn').onclick=()=>{if(cur)copy(plain(cur.E)+', '+plain(cur.N),'Kopirano: E, N');};
+  $('saveBtn').onclick=()=>{
+    if(!cur)return;
+    if(usingExample){pts=[];usingExample=false;}
+    const name=$('ptName').value.trim()||('T'+(pts.length+1));
+    pts.push({name,lat:cur.lat,lon:cur.lon,E:cur.E,N:cur.N,acc:cur.acc,t:cur.time});
+    $('ptName').value='';persist();render();toast('Spremljeno: '+name);
+  };
+  function parseManual(s){
+    const m=s.replace(/[()]/g,'').match(/(-?\d+(?:[.,]\d+)?)\s*[,; ]\s*(-?\d+(?:[.,]\d+)?)/);
+    if(!m)return null;
+    const lat=parseFloat(m[1].replace(',','.')), lon=parseFloat(m[2].replace(',','.'));
+    if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180))return null;
+    return {lat,lon};
+  }
+  $('manualBtn').onclick=()=>{
+    const r=parseManual($('manual').value);
+    if(!r){toast('Upiši φ, λ u decimalnim stupnjevima, npr. 43.50812, 16.44023');return;}
+    const tm=toTM(r.lat,r.lon);
+    cur={lat:r.lat,lon:r.lon,E:tm.E,N:tm.N,acc:null,alt:null,time:Date.now(),src:'manual'};
+    render();toast('Preračunato');
+  };
+  $('manual').addEventListener('keydown',e=>{if(e.key==='Enter')$('manualBtn').click();});
+  function csv(){return 'Naziv;E;N;Lat;Lon;Tocnost_m\n'+pts.map(p=>[p.name,plain(p.E,3),plain(p.N,3),plain(p.lat,8),plain(p.lon,8),p.acc!=null?p.acc.toFixed(1):''].join(';')).join('\n');}
+  function scr(){return pts.map(p=>'_POINT '+plain(p.E,3)+','+plain(p.N,3)+'\n_TEXT '+plain(p.E+0.5,3)+','+plain(p.N+0.5,3)+' 1 0 '+p.name).join('\n')+'\n';}
+  $('csvBtn').onclick=()=>copy(csv(),'CSV kopiran');
+  $('scrBtn').onclick=()=>copy(scr(),'BricsCAD skripta kopirana');
+  let downloads=null;
+  if(window.claude&&window.claude.use){window.claude.use('downloads').then(d=>{downloads=d;}).catch(()=>{});}
+  $('dlBtn').onclick=async()=>{
+    const name='tocke_'+new Date().toISOString().slice(0,10)+'.csv';
+    const data='﻿'+csv();
+    if(downloads){try{await downloads.save({filename:name,data});return;}catch(e){toast('Preuzimanje otkazano');return;}}
+    try{const url=URL.createObjectURL(new Blob([data],{type:'text/csv'}));const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),2000);}
+    catch(e){copy(csv(),'Preuzimanje nije dostupno — CSV kopiran');}
+  };
+  $('clearBtn').onclick=()=>{$('clearConfirm').hidden=false;};
+  $('clearNo').onclick=()=>{$('clearConfirm').hidden=true;};
+  $('clearYes').onclick=()=>{pts=[];usingExample=false;persist();render();$('clearConfirm').hidden=true;toast('Sve točke obrisane');};
+
+  render();startGPS();
+})();
+</script>
+
+</body></html>
