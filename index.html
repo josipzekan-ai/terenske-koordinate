@@ -827,7 +827,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   <section>
     <h2>Uvezi točke</h2>
     <p class="hint">Točke se uvezu same kad dodirneš link iz poruke. Ako se link otvori negdje drugdje, zalijepi ga ovdje (ili cijelu poruku / CSV).</p>
-    <textarea id="importTxt" aria-label="Link ili tekst s točkama" placeholder="https://josipzekan-ai.github.io/terenske-koordinate/?uvoz=…"></textarea>
+    <textarea id="importTxt" aria-label="Link ili tekst s točkama" placeholder="https://josipzekan-ai.github.io/terenske-koordinate/u/…"></textarea>
     <div class="row">
       <button class="small primary grow" id="pasteBtn">Zalijepi kopirano i uvezi</button>
       <button class="small grow" id="importBtn">Uvezi iz polja</button>
@@ -1055,8 +1055,26 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   const UVOZ=/uvoz(?:=|%3D)([A-Za-z0-9_%-]+)/i;
   const APP_URL='https://josipzekan-ai.github.io/terenske-koordinate/';
   let pendingShare=null;
-  function encodeShare(g,list){
-    return b64e(JSON.stringify({v:2,o:S.me||'',g:g.name,p:list.map(p=>[p.name,+p.lat.toFixed(8),+p.lon.toFixed(8),p.acc!=null?+p.acc.toFixed(1):null,p.t?Math.round(p.t/1000):0,p.alt!=null?+p.alt.toFixed(1):null])}));
+  function b64eBytes(b){let bin='';for(let i=0;i<b.length;i++)bin+=String.fromCharCode(b[i]);return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+  function b64dBytes(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';const bin=atob(s);return Uint8Array.from(bin,c=>c.charCodeAt(0));}
+  async function streamBytes(bytes,ts){const r=new Blob([bytes]).stream().pipeThrough(ts);return new Uint8Array(await new Response(r).arrayBuffer());}
+  async function encodeShare(g,list){
+    const json=JSON.stringify({v:2,o:S.me||'',g:g.name,p:list.map(p=>[p.name,+p.lat.toFixed(8),+p.lon.toFixed(8),p.acc!=null?+p.acc.toFixed(1):null,p.t?Math.round(p.t/1000):0,p.alt!=null?+p.alt.toFixed(1):null])});
+    const raw=new TextEncoder().encode(json);
+    if(window.CompressionStream){try{return 'z'+b64eBytes(await streamBytes(raw,new CompressionStream('deflate-raw')));}catch(e){}}
+    return 'j'+b64eBytes(raw);
+  }
+  // token from /u/<token>: first char = format (z = deflate, j = plain JSON)
+  async function decodeToken(tok){
+    const kind=tok[0],body=tok.slice(1);let bytes=b64dBytes(body);
+    if(kind==='z'){if(!window.DecompressionStream)throw new Error('ovaj preglednik je prestar za uvoz (ažuriraj iOS / Chrome)');bytes=await streamBytes(bytes,new DecompressionStream('deflate-raw'));}
+    else if(kind!=='j')throw new Error('nepoznat oblik linka');
+    return parseJson(new TextDecoder().decode(bytes));
+  }
+  function parseJson(txt){
+    try{const o=JSON.parse(txt);if(o&&o.v===2&&Array.isArray(o.p))
+      return {from:String(o.o||''),gname:String(o.g||''),pts:o.p.map(r=>({name:String(r[0]),lat:+r[1],lon:+r[2],acc:r[3]!=null?+r[3]:null,t:r[4]?r[4]*1000:null,alt:r[5]!=null?+r[5]:null}))};}catch(e){}
+    return {from:'',gname:'',pts:parsePts(txt)};
   }
   function shareGroup(gid){
     if(!S.me){pendingShare=gid;$('nameAsk').hidden=false;$('askName').focus();$('nameAsk').scrollIntoView({block:'center',behavior:'smooth'});return;}
@@ -1064,7 +1082,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   }
   async function doShare(gid){
     const g=G(gid),list=ptsOf(gid);if(!g||!list.length)return;
-    const text=S.me+' šalje '+cnt(list.length)+' – „'+g.name+'“ (HTRS96/TM)\nDodirni link za uvoz:\n'+APP_URL+'?uvoz='+encodeShare(g,list)+'\n\n'+csv(list);
+    const text=S.me+' šalje '+cnt(list.length)+' – „'+g.name+'“ (HTRS96/TM)\nDodirni link za uvoz:\n'+APP_URL+'u/'+(await encodeShare(g,list))+'\n\n'+csv(list);
     if(navigator.share){try{await navigator.share({text});return;}catch(e){if(e&&e.name==='AbortError')return;}}
     copy(text,'Poruka kopirana — zalijepi je u WhatsApp');
   }
@@ -1092,12 +1110,8 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     }
     return out;
   }
-  function decodePayload(s){
-    const txt=b64d(s);
-    try{const o=JSON.parse(txt);if(o&&o.v===2&&Array.isArray(o.p))
-      return {from:String(o.o||''),gname:String(o.g||''),pts:o.p.map(r=>({name:String(r[0]),lat:+r[1],lon:+r[2],acc:r[3]!=null?+r[3]:null,t:r[4]?r[4]*1000:null,alt:r[5]!=null?+r[5]:null}))};}catch(e){}
-    return {from:'',gname:'',pts:parsePts(txt)};
-  }
+  function decodePayload(s){return parseJson(b64d(s));}
+  const UPATH=/terenske-koordinate\/u\/([A-Za-z0-9_-]+)/;
   function importPayload(d,key){
     const list=d.pts.filter(q=>isFinite(q.lat)&&isFinite(q.lon)&&Math.abs(q.lat)<=90&&Math.abs(q.lon)<=180);
     if(!list.length){toast('U linku/tekstu nisam našao točke',3500);return false;}
@@ -1113,24 +1127,38 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
   function note(msg){$('impTxt').textContent=msg;$('impNote').hidden=false;window.scrollTo(0,0);}
   $('impClose').onclick=()=>{$('impNote').hidden=true;};
   function cleanPay(x){try{x=decodeURIComponent(x);}catch(e){}return x.replace(/[^A-Za-z0-9_-]/g,'');}
-  function checkUrlImport(){
+  function reportImport(d,key){
+    if(!d.pts.length){note('Link je stigao, ali u njemu nema ispravnih točaka. Vjerojatno je odrezan — zamoli pošiljatelja da ponovno podijeli.');return;}
+    const before=S.groups.length;importPayload(d,key);
+    if(S.groups.length>before)note('✓ Uvezeno '+cnt(d.pts.length)+(d.from?' od '+d.from:'')+'. Nova grupa je ispod, označena plavom točkom.');
+    else note('Ove točke su već uvezene ranije.');
+  }
+  async function checkUrlImport(){
+    let pend=null;try{pend=localStorage.getItem('tk-pending');if(pend)localStorage.removeItem('tk-pending');}catch(e){}
+    if(!pend){const mp=location.pathname.match(UPATH);if(mp)pend=mp[1];}
+    if(pend){
+      try{const d=await decodeToken(pend);reportImport(d,'k'+hashStr(pend));}
+      catch(e){note('Link je oštećen ('+pend.length+' znakova): '+(e&&e.message||e));}
+      return;
+    }
     const raw=location.search+location.hash;
     if(!/uvoz/i.test(raw))return;
     const m=raw.match(UVOZ);
     try{history.replaceState(null,'',location.pathname);}catch(e){}
-    if(!m){note('Link sadrži „uvoz“, ali bez podataka o točkama ('+raw.length+' znakova). Zamoli pošiljatelja da ponovno podijeli.');return;}
+    if(!m){note('Ovo je stari oblik linka koji se na putu skrati. Zamoli pošiljatelja da osvježi aplikaciju i ponovno podijeli točke.');return;}
     let pay,d;
     try{pay=cleanPay(m[1]);d=decodePayload(pay);}catch(e){note('Link je oštećen ('+m[1].length+' znakova podataka): '+(e&&e.message||e));return;}
-    if(!d.pts.length){note('Link je stigao ('+pay.length+' znakova), ali u njemu nema ispravnih točaka. Vjerojatno je odrezan.');return;}
-    const before=S.groups.length;
-    importPayload(d,'k'+hashStr(pay));
-    if(S.groups.length>before)note('✓ Uvezeno '+cnt(d.pts.length)+(d.from?' od '+d.from:'')+'. Nova grupa je ispod, označena plavom točkom.');
-    else note('Ove točke su već uvezene ranije.');
+    reportImport(d,'k'+hashStr(pay));
   }
   window.addEventListener('hashchange',checkUrlImport);
   window.addEventListener('pageshow',e=>{if(e.persisted)checkUrlImport();});
-  function importText(t){
-    if(!t||!t.trim()){toast('Nema teksta za uvoz. Kopiraj poruku s linkom pa pokušaj opet.',4000);return false;}const m=t.match(UVOZ);let d,key,pay;
+  async function importText(t){
+    if(!t||!t.trim()){toast('Nema teksta za uvoz. Kopiraj poruku s linkom pa pokušaj opet.',4000);return false;}
+    const mu=t.match(UPATH);
+    if(mu){let d;try{d=await decodeToken(mu[1]);}catch(e){toast('Link je oštećen: '+(e&&e.message||e),5000);return false;}
+      if(!d.pts.length){toast('Link je nepotpun. Zamoli pošiljatelja da ponovno podijeli točke.',4500);return false;}
+      return importPayload(d,'k'+hashStr(mu[1]));}
+    const m=t.match(UVOZ);let d,key,pay;
     if(m){pay=cleanPay(m[1]);try{d=decodePayload(pay);}catch(e){d=null;}
       if(!d||!d.pts.length){const alt=parsePts(t);if(alt.length)d={from:'',gname:'',pts:alt};}
       if(!d||!d.pts.length){toast('Link je nepotpun ili oštećen. Zamoli pošiljatelja da ponovno podijeli točke.',4500);return false;}
@@ -1138,14 +1166,14 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
     else{d={from:'',gname:'',pts:parsePts(t)};key='k'+hashStr(t.trim());}
     return importPayload(d,key);
   }
-  $('importBtn').onclick=()=>{if(importText($('importTxt').value))$('importTxt').value='';};
+  $('importBtn').onclick=async()=>{if(await importText($('importTxt').value))$('importTxt').value='';};
   $('pasteBtn').onclick=async()=>{
     let t='';
     try{t=await navigator.clipboard.readText();}
     catch(e){toast('Preglednik nije dopustio čitanje. Drži prst u polju iznad → Zalijepi, pa „Uvezi iz polja“.',5000);$('importTxt').focus();return;}
     if(!t||!t.trim()){toast('Preglednik nije predao kopirani tekst. Drži prst u polju iznad → Zalijepi, pa „Uvezi iz polja“.',6000);$('importTxt').focus();return;}
     $('importTxt').value=t;
-    if(importText(t))$('importTxt').value='';
+    if(await importText(t))$('importTxt').value='';
   };
 
   // ---------- map sheet ----------

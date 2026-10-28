@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="hr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Terenske koordinate</title>
+<style>body{margin:0;background:#0b1820;color:#e3edf2;font:16px system-ui,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:24px}</style>
+<script>
+(function(){
+  var m=location.pathname.match(/\/terenske-koordinate\/u\/([A-Za-z0-9_-]+)/);
+  if(m){try{localStorage.setItem('tk-pending',m[1]);}catch(e){}}
+  location.replace('/terenske-koordinate/');
+})();
+</script></head><body>Otvaram Terenske koordinate…</body></html>
