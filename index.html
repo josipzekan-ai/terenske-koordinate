@@ -726,6 +726,10 @@ h2{font-family:var(--display);font-weight:700;font-size:1.15rem;margin:0}
 .grp{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .ghead{width:100%;border:0;border-radius:0;background:none;justify-content:flex-start;gap:12px;padding:12px 14px;text-align:left;min-height:60px}
 .gdot{width:14px;height:14px;border-radius:50%;flex:none;box-shadow:0 0 0 2px var(--panel),0 0 0 3px var(--line)}
+.livebox{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-width:112px;padding:4px 10px;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.livebox .acc{font-size:.95rem;font-weight:600}
+.livebox .cmp{font-size:.72rem;color:var(--muted);text-align:center;line-height:1.2}
+.livebox .cmp.better{color:var(--ok)}
 .swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .sw{width:34px;height:34px;min-height:34px;padding:0;border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line)}
 .sw[aria-pressed="true"]{box-shadow:0 0 0 3px var(--ink)}
@@ -986,6 +990,7 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       $('saveBtn').disabled=false;$('copyBtn').disabled=false;
     }
     const r=$('redoBtn');if(r)r.disabled=!(cur&&cur.src==='gps');
+    updateRedoAcc();
   }
 
   // ---------- groups UI ----------
@@ -1318,11 +1323,24 @@ tr.flash td,.grp.flash{animation:flash 2.4s ease-out}
       $('shSub').textContent=(G(p.g)?G(p.g).name+' · ':'')+'snimljeno '+fDate(p.t);
       toast(p.name+' ponovno snimljena (± '+cur.acc.toFixed(1)+' m)');
     });
-    b.appendChild(el('div',{class:'row'},redo,el('button',{class:'grow',text:'Kopiraj E, N',onclick:()=>copy(plain(p.E)+', '+plain(p.N),'Kopirano: E, N')})));
+    const live=el('div',{class:'livebox','aria-live':'polite'},el('span',{class:'lbl',text:'Sada'}),el('span',{class:'acc none',id:'redoAcc',text:'—'}),el('span',{class:'cmp',id:'redoCmp'}));
+    redoPt=p;
+    b.appendChild(el('div',{class:'row',style:'flex-wrap:nowrap'},redo,live));
+    updateRedoAcc();
     const delb=el('button',{class:'grow danger',text:'Ukloni točku'});
     armBtn(delb,'Potvrdi brisanje',()=>{S.pts=S.pts.filter(x=>x.id!==p.id);persist();renderAll();const bg=backGrp;if(bg&&ptsOf(bg).length)openGroupMap(bg);else closeSheet();toast('Točka uklonjena');});
-    b.appendChild(el('div',{class:'row'},el('a',{class:'btn grow',href:'https://www.google.com/maps/search/?api=1&query='+p.lat.toFixed(7)+','+p.lon.toFixed(7),target:'_blank',rel:'noopener',text:'Otvori u Google Mapsu'}),delb));
+    b.appendChild(el('div',{class:'row'},el('button',{class:'grow',text:'Kopiraj E, N',onclick:()=>copy(plain(p.E)+', '+plain(p.N),'Kopirano: E, N')}),el('a',{class:'btn grow',href:'https://www.google.com/maps/search/?api=1&query='+p.lat.toFixed(7)+','+p.lon.toFixed(7),target:'_blank',rel:'noopener',text:'Otvori u Google Mapsu'})));
+    b.appendChild(el('div',{class:'row'},delb));
     b.appendChild(el('p',{class:'hint',text:'„Ponovno snimi“ zamjenjuje položaj ove točke trenutnim GPS očitanjem (dodirni dvaput). Naziv i grupa ostaju.'}));
+  }
+  let redoPt=null;
+  function updateRedoAcc(){
+    const a=$('redoAcc'),c=$('redoCmp');if(!a)return;
+    if(!(cur&&cur.src==='gps'&&cur.acc!=null)){a.textContent='čekam GPS';a.className='acc none';c.textContent='';c.className='cmp';return;}
+    a.textContent='± '+cur.acc.toFixed(1)+' m';a.className='acc '+(cur.acc<=5?'ok':cur.acc<=15?'warn':'bad');
+    const p=redoPt&&$('redoBtn')?redoPt:null;
+    if(p&&p.acc!=null){const better=cur.acc<p.acc;c.textContent=(better?'bolje od spremljene ':'spremljeno ')+'± '+p.acc.toFixed(1)+' m';c.className='cmp'+(better?' better':'');}
+    else c.textContent='';
   }
   function openGroupMap(gid){
     const g=G(gid),list=ptsOf(gid);if(!g)return;
